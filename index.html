@@ -1,0 +1,990 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rhythm Rush - Levels & Audio Upgrade</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a;
+            overflow: hidden;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            background: linear-gradient(to bottom, #1e293b, #0f172a);
+        }
+
+        .ui-overlay {
+            position: absolute;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 2rem;
+            color: white;
+            z-index: 10;
+        }
+
+        .fever-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .fever-progress {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #f472b6, #fbbf24);
+            transition: width 0.1s linear;
+        }
+
+        .fever-active {
+            box-shadow: 0 0 20px #fbbf24;
+            animation: pulse 1s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        .modal {
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(10px);
+        }
+
+        /* New Shoutout Styles */
+        #shoutout-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.5);
+            opacity: 0;
+            text-align: center;
+            font-size: 4rem;
+            font-weight: 900;
+            font-style: italic;
+            text-transform: uppercase;
+            color: #fff;
+            text-shadow: 0 0 20px #ec4899, 0 0 40px #ec4899;
+            transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            z-index: 50;
+            white-space: nowrap;
+        }
+
+        .shoutout-active {
+            transform: translate(-50%, -50%) scale(1.2) !important;
+            opacity: 1 !important;
+        }
+
+        .shoutout-fade {
+            transform: translate(-50%, -50%) scale(2) !important;
+            opacity: 0 !important;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="game-container">
+        <div class="ui-overlay" id="ui-layer">
+            <div class="flex justify-between items-start">
+                <div class="flex gap-8">
+                    <div>
+                        <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Score</h2>
+                        <div id="score-display" class="text-3xl font-black text-white">00000</div>
+                    </div>
+                    <div>
+                        <h2 class="text-xs font-bold uppercase tracking-widest text-pink-400">Level</h2>
+                        <div id="level-display"
+                            class="text-3xl font-black text-pink-500 drop-shadow-[0_0_10px_rgba(236,72,153,0.8)]">1
+                        </div>
+                    </div>
+                    <div>
+                        <h2 class="text-xs font-bold uppercase tracking-widest text-red-500">Lives</h2>
+                        <div id="lives-display"
+                            class="text-3xl font-black text-red-500 drop-shadow-[0_0_10px_rgba(239,68,68,0.8)]">5</div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <h2 class="text-xs font-bold uppercase tracking-widest text-slate-400">Streak</h2>
+                    <div id="streak-display" class="text-4xl font-black text-pink-500">0</div>
+                </div>
+            </div>
+
+            <div class="flex flex-col items-center gap-2 mb-10">
+                <div id="feedback-text"
+                    class="text-2xl font-black uppercase italic tracking-tighter scale-0 transition-transform duration-75">
+                    Perfect!</div>
+                <div class="fever-bar">
+                    <div id="fever-fill" class="fever-progress"></div>
+                </div>
+                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Fever Meter</div>
+            </div>
+        </div>
+
+        <!-- The Shoutout Text Element -->
+        <div id="shoutout-text">10 COMBO!</div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Start/Game Over Screens -->
+        <div id="menu" class="absolute inset-0 flex items-center justify-center modal z-20 p-6 text-center">
+            <div class="max-w-sm">
+                <h1 class="text-5xl font-black text-white mb-2 italic tracking-tighter drop-shadow-lg">RHYTHM<br><span
+                        class="text-pink-500">RUSH</span></h1>
+                <p class="text-xs font-bold text-pink-400 uppercase tracking-widest mb-6">Level Up Edition</p>
+                <p class="text-slate-400 mb-8 leading-relaxed">Tap the screen or press <span
+                        class="text-white font-mono">SPACE</span> when notes enter the target zone. Turn up your volume.
+                </p>
+                <p class="text-lime-500 text-xs font-bold uppercase mb-4 animate-pulse">⚠ DO NOT TAP THE GREEN VIRUS
+                    BUGS ⚠</p>
+                <button onclick="startGame()"
+                    class="w-full py-4 bg-pink-600 hover:bg-pink-500 text-white font-bold rounded-2xl shadow-[0_0_20px_rgba(236,72,153,0.5)] transform transition active:scale-95">START
+                    SESSION</button>
+            </div>
+        </div>
+
+        <div id="game-over" class="absolute inset-0 hidden items-center justify-center modal z-30 p-6 text-center">
+            <div class="max-w-sm">
+                <h1 id="end-status" class="text-4xl font-black text-white mb-2">SESSION ENDED</h1>
+                <p id="end-reason" class="text-slate-400 mb-6">The rhythm got the best of you.</p>
+                <div class="grid grid-cols-2 gap-4 mb-8">
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                        <div class="text-xs text-slate-500 uppercase font-bold">Best Streak</div>
+                        <div id="final-streak" class="text-2xl font-black text-white">0</div>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700">
+                        <div class="text-xs text-slate-500 uppercase font-bold">Level Reached</div>
+                        <div id="final-level" class="text-2xl font-black text-pink-500">1</div>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-2xl border border-slate-700 col-span-2">
+                        <div class="text-xs text-slate-500 uppercase font-bold">Final Score</div>
+                        <div id="final-score" class="text-4xl font-black text-white">0</div>
+                    </div>
+                </div>
+                <button onclick="startGame()"
+                    class="w-full py-4 bg-white text-slate-900 font-bold rounded-2xl shadow-xl transform transition active:scale-95 mb-3">PLAY
+                    AGAIN</button>
+                <button onclick="location.reload()" class="w-full py-2 text-slate-500 text-sm font-bold">MAIN
+                    MENU</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score-display');
+        const streakEl = document.getElementById('streak-display');
+        const levelEl = document.getElementById('level-display');
+        const livesEl = document.getElementById('lives-display');
+        const feverFill = document.getElementById('fever-fill');
+        const feedbackText = document.getElementById('feedback-text');
+        const shoutoutText = document.getElementById('shoutout-text');
+        const menu = document.getElementById('menu');
+        const gameOverScreen = document.getElementById('game-over');
+
+        // Configuration
+        let state = {
+            score: 0,
+            level: 1,
+            streak: 0,
+            maxStreak: 0,
+            fever: 0,
+            lives: 5,
+            isFeverActive: false,
+            gameActive: false,
+            lastFrame: 0,
+            shake: 0,
+            difficulty: 1.0,
+            totalMeasures: 0,
+            notesSpawned: 0,
+            nextBugAt: 0
+        };
+
+        const config = {
+            targetY: 0,
+            laneCount: 4,
+            baseNoteSpeed: 300,
+            baseSpawnRate: 1.0,
+            perfectZone: 40,
+            hitRange: 80,
+            measuresPerLevel: 16 // Reduced from 64 for quicker level pacing
+        };
+
+        let notes = [];
+        let particles = [];
+        let lanes = [];
+        let lanePulses = [0, 0, 0, 0];
+        let audioEngine = null;
+        let spawnTimeout = null;
+
+        // --- NEURO-PSYCH: SHOUTOUTS & VOICE ---
+        function triggerShoutout(text, pitch = 1.0) {
+            // Visual
+            shoutoutText.innerText = text;
+            shoutoutText.classList.remove('shoutout-fade');
+            shoutoutText.classList.add('shoutout-active');
+
+            setTimeout(() => {
+                shoutoutText.classList.remove('shoutout-active');
+                shoutoutText.classList.add('shoutout-fade');
+            }, 1000);
+
+            // Voice (Web Speech API)
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.pitch = pitch;
+                utterance.rate = 1.3;
+                utterance.volume = 0.8;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        // --- NEURO-PSYCH: AUDIO SYNTHESIS UPGRADE ---
+        class AudioEngine {
+            constructor() {
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.isPlaying = false;
+                this.timerID = null;
+
+                // Define Song Profiles
+                this.songProfiles = [
+                    {
+                        name: "Synthwave",
+                        bpm: 110,
+                        chords: [
+                            { root: 73.42, arp: [146.83, 174.61, 220.00, 293.66] },
+                            { root: 87.31, arp: [174.61, 220.00, 261.63, 349.23] },
+                            { root: 55.00, arp: [110.00, 130.81, 164.81, 220.00] },
+                            { root: 98.00, arp: [196.00, 246.94, 293.66, 392.00] }
+                        ],
+                        bassType: 'square',
+                        leadType: 'sawtooth'
+                    },
+                    {
+                        name: "Cyberpunk",
+                        bpm: 135,
+                        chords: [
+                            { root: 65.41, arp: [130.81, 155.56, 196.00, 261.63] },
+                            { root: 65.41, arp: [130.81, 155.56, 196.00, 261.63] },
+                            { root: 58.27, arp: [116.54, 138.59, 174.61, 233.08] },
+                            { root: 77.78, arp: [155.56, 185.00, 233.08, 311.13] }
+                        ],
+                        bassType: 'sawtooth',
+                        leadType: 'square'
+                    },
+                    {
+                        name: "Dreamy",
+                        bpm: 95,
+                        chords: [
+                            { root: 110.00, arp: [220.00, 277.18, 329.63, 440.00] },
+                            { root: 110.00, arp: [220.00, 277.18, 329.63, 440.00] },
+                            { root: 82.41, arp: [164.81, 207.65, 246.94, 329.63] },
+                            { root: 92.50, arp: [185.00, 233.08, 277.18, 369.99] }
+                        ],
+                        bassType: 'triangle',
+                        leadType: 'sine'
+                    }
+                ];
+
+                this.currentProfile = this.songProfiles[0];
+                this.bpm = this.currentProfile.bpm;
+                this.bar = 0;
+                this.nextNoteTime = this.ctx.currentTime + 0.1;
+                this.step = 0;
+            }
+
+            start() {
+                if (this.ctx.state === 'suspended') this.ctx.resume();
+
+                if ('speechSynthesis' in window) {
+                    let u = new SpeechSynthesisUtterance('');
+                    u.volume = 0;
+                    window.speechSynthesis.speak(u);
+                }
+
+                if (this.isPlaying) return;
+                this.isPlaying = true;
+
+                this.currentProfile = this.songProfiles[Math.floor(Math.random() * this.songProfiles.length)];
+                this.bpm = this.currentProfile.bpm;
+
+                this.nextNoteTime = this.ctx.currentTime + 0.1;
+                this.step = 0;
+                this.bar = 0;
+                this.schedule();
+            }
+
+            stop() {
+                this.isPlaying = false;
+                cancelAnimationFrame(this.timerID);
+            }
+
+            playTone(freq, type, attack, decay, vol, slideFreq = null) {
+                if (!this.isPlaying) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                if (slideFreq) osc.frequency.exponentialRampToValueAtTime(slideFreq, this.ctx.currentTime + attack + decay);
+
+                gain.gain.setValueAtTime(0.001, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(vol, this.ctx.currentTime + attack);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + attack + decay);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(this.ctx.currentTime);
+                osc.stop(this.ctx.currentTime + attack + decay);
+            }
+
+            playNoise(decay, vol, filterType = 'highpass', filterFreq = 5000) {
+                if (!this.isPlaying) return;
+                const bufferSize = this.ctx.sampleRate * decay;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const gain = this.ctx.createGain();
+                const filter = this.ctx.createBiquadFilter();
+
+                filter.type = filterType;
+                filter.frequency.value = filterFreq;
+
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + decay);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start(this.ctx.currentTime);
+            }
+
+            schedule() {
+                if (!this.isPlaying) return;
+                while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+                    this.playSequenceStep(this.step, state.level);
+
+                    this.step++;
+                    if (this.step >= 16) {
+                        this.step = 0;
+                        this.bar = (this.bar + 1) % 4; // 4 bar loop
+
+                        if (state.gameActive) {
+                            state.totalMeasures++;
+                            if (state.totalMeasures >= state.level * config.measuresPerLevel) {
+                                checkLevelUp();
+                            }
+                        }
+                    }
+
+                    let currentBpm = this.bpm + ((state.level - 1) * 10);
+                    if (state.isFeverActive) currentBpm += 15;
+
+                    this.nextNoteTime += (60 / currentBpm) / 4;
+                }
+                this.timerID = requestAnimationFrame(() => this.schedule());
+            }
+
+            playSequenceStep(step, level) {
+                const chord = this.currentProfile.chords[this.bar];
+
+                if (step % 4 === 0) {
+                    this.playTone(120, 'sine', 0.01, 0.4, 0.6, 40);
+                }
+                if (step % 4 === 0 || step === 10 || step === 14) {
+                    this.playTone(chord.root, this.currentProfile.bassType, 0.02, 0.3, 0.15);
+                }
+
+                if (level >= 2) {
+                    if (step % 8 === 4) {
+                        this.playNoise(0.2, 0.4, 'bandpass', 2000);
+                        this.playTone(200, 'triangle', 0.01, 0.2, 0.3, 100);
+                    }
+                    if (step % 2 !== 0) {
+                        this.playNoise(0.05, 0.1, 'highpass', 8000);
+                    }
+                }
+
+                if (level >= 3) {
+                    const arpFreq = chord.arp[step % 4];
+                    if (step % 2 === 0 || step % 3 === 0) {
+                        this.playTone(arpFreq, this.currentProfile.leadType, 0.05, 0.15, 0.08);
+                    }
+                }
+
+                if (level >= 4) {
+                    this.playNoise(0.02, 0.05, 'highpass', 10000);
+                    if (state.isFeverActive && step === 0) {
+                        this.playTone(chord.arp[3] * 2, 'sine', 0.5, 1.5, 0.05);
+                    }
+                }
+            }
+
+            sfxHit(perfect) {
+                if (perfect) {
+                    this.playTone(880, 'sine', 0.01, 0.1, 0.2);
+                    this.playTone(1318.5, 'sine', 0.01, 0.2, 0.15);
+                } else {
+                    this.playTone(440, 'triangle', 0.01, 0.1, 0.2);
+                }
+            }
+            sfxMiss() {
+                this.playTone(200, 'sawtooth', 0.05, 0.4, 0.3, 50);
+            }
+            sfxExplosion() {
+                this.playNoise(0.6, 0.8, 'lowpass', 600);
+                this.playTone(150, 'sawtooth', 0.05, 0.5, 0.5, 10);
+            }
+            sfxFever() {
+                this.playTone(400, 'sine', 0.1, 1.0, 0.2, 1200);
+            }
+            sfxLevelUp() {
+                this.playTone(440, 'sawtooth', 0.1, 0.2, 0.2, 880);
+                setTimeout(() => this.playTone(554, 'sawtooth', 0.1, 0.2, 0.2, 1108), 100);
+                setTimeout(() => this.playTone(659, 'sawtooth', 0.1, 0.4, 0.2, 1318), 200);
+            }
+        }
+
+        // --- RENDER & SIZING ---
+        function resize() {
+            const container = document.getElementById('game-container');
+            canvas.width = Math.min(window.innerWidth * 0.9, 450);
+            canvas.height = window.innerHeight * 0.85;
+
+            config.targetY = canvas.height - 120;
+
+            const laneWidth = canvas.width / config.laneCount;
+            lanes = Array.from({ length: config.laneCount }, (_, i) => laneWidth * i + laneWidth / 2);
+        }
+
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- GAME CLASSES ---
+        class Particle {
+            constructor(x, y, color, chaotic = false) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                const speedMultiplier = chaotic ? 4 : 1;
+                this.vx = (Math.random() - 0.5) * 20 * speedMultiplier;
+                this.vy = (Math.random() - 0.5) * 20 * speedMultiplier;
+                this.life = 1.0;
+                this.size = (Math.random() * 6 + 2) * (chaotic ? 2 : 1);
+            }
+            update(dt) {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= dt * 2.5;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.globalAlpha = Math.max(0, this.life);
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class Note {
+            constructor(isBug = false) {
+                this.isBug = isBug;
+                this.lane = Math.floor(Math.random() * config.laneCount);
+                this.x = lanes[this.lane];
+                this.y = -50;
+                this.hit = false;
+                this.size = 35;
+                this.stretchX = 1;
+                this.stretchY = 1;
+
+                if (this.isBug) {
+                    this.color = '#84cc16'; // Toxic green
+                } else {
+                    const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
+                    this.color = state.isFeverActive ? '#fbbf24' : (colors[Math.min(state.level - 1, 3)] || '#ec4899');
+                }
+            }
+            update(dt) {
+                let speedMultiplier = 1 + ((state.level - 1) * 0.2);
+                if (state.isFeverActive) speedMultiplier += 0.3;
+
+                this.y += config.baseNoteSpeed * speedMultiplier * dt;
+
+                const dist = Math.abs(this.y - config.targetY);
+                if (dist < 150 && !this.isBug) {
+                    this.stretchY = 1.3;
+                    this.stretchX = 0.7;
+                } else {
+                    this.stretchY = 1;
+                    this.stretchX = 1;
+                }
+            }
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.scale(this.stretchX, this.stretchY);
+
+                ctx.shadowBlur = 20;
+                ctx.shadowColor = this.color;
+
+                if (this.isBug) {
+                    // Draw rotating Spiked Mine
+                    ctx.fillStyle = '#0f172a';
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 4;
+                    ctx.beginPath();
+                    for (let i = 0; i < 8; i++) {
+                        let angle = (i / 8) * Math.PI * 2 + (performance.now() / 300); // Spinning effect
+                        let outerX = Math.cos(angle) * (this.size / 1.3);
+                        let outerY = Math.sin(angle) * (this.size / 1.3);
+                        ctx.moveTo(0, 0);
+                        ctx.lineTo(outerX, outerY);
+                    }
+                    ctx.stroke();
+
+                    // Inner core
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, this.size / 4, 0, Math.PI * 2);
+                    ctx.fill();
+
+                } else {
+                    // Draw standard note
+                    const grad = ctx.createLinearGradient(0, -this.size / 2, 0, this.size / 2);
+                    grad.addColorStop(0, '#ffffff');
+                    grad.addColorStop(0.5, this.color);
+                    grad.addColorStop(1, '#000000');
+
+                    ctx.fillStyle = grad;
+                    ctx.beginPath();
+                    ctx.roundRect(-this.size / 2 + 5, -this.size / 4, this.size - 10, this.size / 2, 8);
+                    ctx.fill();
+                }
+
+                ctx.restore();
+            }
+        }
+
+        // --- GAMEPLAY LOGIC ---
+        function spawnNote() {
+            if (!state.gameActive) return;
+
+            state.notesSpawned++;
+            let isBug = false;
+            if (state.notesSpawned >= state.nextBugAt) {
+                isBug = true;
+                // Schedule the next bug to appear in 10 to 20 notes
+                state.nextBugAt = state.notesSpawned + Math.floor(Math.random() * 11) + 10;
+            }
+
+            notes.push(new Note(isBug));
+
+            let spawnMultiplier = 1 + ((state.level - 1) * 0.15);
+            if (state.isFeverActive) spawnMultiplier += 0.2;
+
+            const delay = (1000 / (config.baseSpawnRate * spawnMultiplier));
+            spawnTimeout = setTimeout(spawnNote, delay);
+        }
+
+        function triggerHit(laneIndex) {
+            if (!state.gameActive) return;
+
+            let hitNote = null;
+            let minTime = Infinity;
+
+            notes.forEach((note, index) => {
+                if (note.lane === laneIndex && !note.hit) {
+                    const diff = Math.abs(note.y - config.targetY);
+                    if (diff < config.hitRange && diff < minTime) {
+                        minTime = diff;
+                        hitNote = { note, index, diff };
+                    }
+                }
+            });
+
+            if (hitNote) {
+                if (hitNote.note.isBug) {
+                    processBugHit(hitNote.note, hitNote.index);
+                } else {
+                    processHit(hitNote);
+                }
+            } else {
+                processMiss();
+            }
+        }
+
+        function processBugHit(note, index) {
+            note.hit = true;
+
+            state.lives--;
+            state.shake = 40;
+            state.streak = 0;
+            state.fever = 0;
+
+            if (state.isFeverActive) {
+                state.isFeverActive = false;
+                feverFill.classList.remove('fever-active');
+            }
+
+            if (audioEngine) audioEngine.sfxExplosion();
+
+            showFeedback('POISON!', '#84cc16');
+            triggerShoutout("CAREFUL!", 0.5);
+
+            // Explosion Particles
+            for (let i = 0; i < 40; i++) particles.push(new Particle(note.x, note.y, '#84cc16', true));
+
+            updateUI();
+            notes.splice(index, 1);
+
+            if (state.lives <= 0) {
+                endGame();
+            }
+        }
+
+        function processHit({ note, index, diff }) {
+            note.hit = true;
+            const isPerfect = diff < config.perfectZone;
+
+            const basePoints = isPerfect ? 100 : 50;
+            const levelMultiplier = state.level;
+            const feverMultiplier = state.isFeverActive ? 4 : 1;
+
+            state.score += (basePoints * levelMultiplier * feverMultiplier);
+            state.streak++;
+            state.maxStreak = Math.max(state.streak, state.maxStreak);
+
+            // --- SHOUTOUT TRIGGERS ---
+            if (state.streak === 10) triggerShoutout("10 COMBO!", 1.0);
+            else if (state.streak === 25) triggerShoutout("25 COMBO!", 1.2);
+            else if (state.streak === 50) triggerShoutout("50 COMBO!!", 1.5);
+            else if (state.streak === 100) triggerShoutout("UNSTOPPABLE!!", 1.8);
+
+            if (!state.isFeverActive) {
+                state.fever = Math.min(100, state.fever + (isPerfect ? 5 : 2));
+                if (state.fever >= 100) activateFever();
+            }
+
+            if (audioEngine) audioEngine.sfxHit(isPerfect);
+
+            const isChaotic = state.isFeverActive;
+            const pCount = isChaotic ? 100 : (isPerfect ? 25 : 10);
+            const color = isChaotic ? (Math.random() > 0.5 ? '#fbbf24' : '#fff') : (isPerfect ? '#fbbf24' : note.color);
+            for (let i = 0; i < pCount; i++) particles.push(new Particle(note.x, note.y, color, isChaotic));
+
+            state.shake = isChaotic ? 40 : (isPerfect ? 12 : 5);
+            showFeedback(isChaotic ? 'INSANE!' : (isPerfect ? 'PERFECT' : 'GOOD'), isChaotic ? '#fbbf24' : '#fff');
+            updateUI();
+
+            notes.splice(index, 1);
+        }
+
+        function processMiss() {
+            if (state.streak > 5) {
+                state.shake = 15;
+                showFeedback('MISS', '#ef4444');
+                triggerShoutout("COMBO BROKEN", 0.5);
+            }
+
+            state.lives--;
+            state.shake = 20;
+
+            if (state.isFeverActive) {
+                state.isFeverActive = false;
+                feverFill.classList.remove('fever-active');
+                triggerShoutout("FEVER LOST!", 0.5);
+            }
+
+            if (audioEngine && state.streak > 0) audioEngine.sfxMiss();
+            state.streak = 0;
+            state.fever = 0;
+            updateUI();
+
+            if (state.lives <= 0) {
+                endGame();
+            }
+        }
+
+        function checkLevelUp() {
+            state.level++;
+            state.shake = 25;
+            triggerShoutout(`LEVEL ${state.level}!`, 1.5);
+            if (audioEngine) audioEngine.sfxLevelUp();
+            updateUI();
+        }
+
+        function activateFever() {
+            state.isFeverActive = true;
+            state.shake = 35;
+            state.fever = 100;
+            if (audioEngine) audioEngine.sfxFever();
+            triggerShoutout("FEVER TIME!", 2.0);
+            feverFill.classList.add('fever-active');
+            updateUI();
+        }
+
+        function showFeedback(text, color = '#fff') {
+            feedbackText.innerText = text;
+            feedbackText.style.color = color;
+            feedbackText.style.transform = 'scale(1.3) rotate(' + (Math.random() * 10 - 5) + 'deg)';
+            setTimeout(() => {
+                feedbackText.style.transform = 'scale(0)';
+            }, 250);
+        }
+
+        function updateUI() {
+            scoreEl.innerText = state.score.toString().padStart(5, '0');
+            streakEl.innerText = state.streak;
+            levelEl.innerText = state.level;
+            livesEl.innerText = '❤️'.repeat(Math.max(0, state.lives));
+            feverFill.style.width = state.fever + '%';
+        }
+
+        // --- GAME LOOP ---
+        function startGame() {
+            if (!audioEngine) audioEngine = new AudioEngine();
+            audioEngine.start();
+
+            clearTimeout(spawnTimeout);
+
+            state = {
+                score: 0,
+                level: 1,
+                streak: 0,
+                maxStreak: 0,
+                fever: 0,
+                lives: 5,
+                isFeverActive: false,
+                gameActive: true,
+                lastFrame: performance.now(),
+                shake: 0,
+                totalMeasures: 0,
+                notesSpawned: 0,
+                nextBugAt: Math.floor(Math.random() * 11) + 10 // Bug at 10-20 notes
+            };
+            notes = [];
+            particles = [];
+            lanePulses = [0, 0, 0, 0];
+
+            menu.classList.add('hidden');
+            gameOverScreen.classList.add('hidden');
+
+            triggerShoutout("BEGIN!", 1.0);
+            updateUI();
+            spawnNote();
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            state.gameActive = false;
+            clearTimeout(spawnTimeout);
+            if (audioEngine) audioEngine.stop();
+
+            gameOverScreen.classList.remove('hidden');
+            gameOverScreen.classList.add('flex');
+            document.getElementById('final-score').innerText = state.score;
+            document.getElementById('final-streak').innerText = state.maxStreak;
+            document.getElementById('final-level').innerText = state.level;
+
+            const nextTarget = state.level * config.measuresPerLevel;
+            if (state.totalMeasures > nextTarget * 0.8) {
+                document.getElementById('end-status').innerText = "SO CLOSE!";
+                document.getElementById('end-reason').innerText = `You almost reached Level ${state.level + 1}!`;
+            } else {
+                document.getElementById('end-status').innerText = "SESSION ENDED";
+                document.getElementById('end-reason').innerText = "The rhythm got the best of you.";
+            }
+        }
+
+        function gameLoop(now) {
+            if (!state.gameActive) return;
+            const dt = (now - state.lastFrame) / 1000;
+            state.lastFrame = now;
+
+            update(dt);
+            draw();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function update(dt) {
+            if (state.shake > 0) state.shake -= dt * 50;
+
+            for (let i = 0; i < lanePulses.length; i++) {
+                if (lanePulses[i] > 0) lanePulses[i] -= dt * 4;
+            }
+
+            for (let i = notes.length - 1; i >= 0; i--) {
+                notes[i].update(dt);
+
+                // Note has passed the hit zone
+                if (notes[i].y > canvas.height + 20) {
+                    // If it's a bug, passing is GOOD. Only miss if it's a standard note
+                    if (!notes[i].hit && !notes[i].isBug) {
+                        processMiss();
+                    }
+                    notes.splice(i, 1);
+                }
+            }
+
+            for (let i = particles.length - 1; i >= 0; i--) {
+                particles[i].update(dt);
+                if (particles[i].life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function draw() {
+            // Base Background - STROBE REMOVED
+            const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            bgGrad.addColorStop(0, '#0f172a');
+            bgGrad.addColorStop(1, state.isFeverActive ? '#991b1b' : '#1e1b4b'); // Deep, solid red for fever
+
+            ctx.fillStyle = bgGrad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.save();
+            if (state.shake > 0) {
+                ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
+            }
+
+            // Perspective Grid
+            const time = performance.now() / 1000;
+            const speed = 100 * (1 + (state.level * 0.2));
+            const gridY = (time * speed) % 80;
+
+            ctx.strokeStyle = state.isFeverActive ? 'rgba(251, 191, 36, 0.2)' : 'rgba(236, 72, 153, 0.15)';
+            ctx.lineWidth = 1 + (state.level * 0.2);
+            ctx.beginPath();
+            for (let y = gridY; y < canvas.height; y += 80) {
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+            }
+            const centerX = canvas.width / 2;
+            for (let i = -5; i <= 5; i++) {
+                ctx.moveTo(centerX + i * 60, 0);
+                ctx.lineTo(centerX + i * 200, canvas.height);
+            }
+            ctx.stroke();
+
+            const laneWidth = canvas.width / config.laneCount;
+
+            // Draw Lanes and Pulses
+            ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+            ctx.lineWidth = 2;
+            lanes.forEach((x, i) => {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+
+                if (lanePulses[i] > 0) {
+                    const pulseGrad = ctx.createLinearGradient(0, config.targetY, 0, 0);
+                    const color = state.isFeverActive ? '251, 191, 36' : '236, 72, 153';
+                    pulseGrad.addColorStop(0, `rgba(${color}, ${lanePulses[i] * 0.5})`);
+                    pulseGrad.addColorStop(1, `rgba(${color}, 0)`);
+                    ctx.fillStyle = pulseGrad;
+                    ctx.fillRect(x - laneWidth / 2, 0, laneWidth, canvas.height);
+                }
+            });
+
+            // Target Zone
+            ctx.fillStyle = state.isFeverActive ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255,255,255,0.05)';
+            ctx.beginPath();
+            ctx.roundRect(10, config.targetY - 20, canvas.width - 20, 40, 10);
+            ctx.fill();
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = state.isFeverActive ? '#fbbf24' : '#ec4899';
+            ctx.strokeStyle = state.isFeverActive ? '#fbbf24' : 'rgba(236, 72, 153, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            notes.forEach(note => note.draw());
+            particles.forEach(p => p.draw());
+
+            ctx.restore();
+        }
+
+        // --- CONTROLS ---
+        function handleTap(laneIndex) {
+            if (!audioEngine) return;
+            if (audioEngine.ctx.state === 'suspended') audioEngine.ctx.resume();
+            lanePulses[laneIndex] = 1.0;
+            triggerHit(laneIndex);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                const nextNote = notes[0];
+                const lane = nextNote ? nextNote.lane : Math.floor(Math.random() * config.laneCount);
+                handleTap(lane);
+            }
+            if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
+                const lane = parseInt(e.key) - 1;
+                handleTap(lane);
+            }
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touchX = e.changedTouches[i].clientX - rect.left;
+                const laneIndex = Math.floor(touchX / (canvas.width / config.laneCount));
+                handleTap(laneIndex);
+            }
+        });
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const laneIndex = Math.floor(mouseX / (canvas.width / config.laneCount));
+            handleTap(laneIndex);
+        });
+    </script>
+</body>
+
+</html>
