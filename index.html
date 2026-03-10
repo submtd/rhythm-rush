@@ -57,12 +57,17 @@
             height: 100%;
             width: 0%;
             background: linear-gradient(90deg, #f472b6, #fbbf24);
-            transition: width 0.1s linear;
+            transition: width 0.1s linear, background 0.3s ease;
         }
 
         .fever-active {
             box-shadow: 0 0 20px #fbbf24;
             animation: pulse 1s infinite;
+        }
+
+        .super-rush-active {
+            box-shadow: 0 0 30px #22d3ee;
+            animation: pulse 0.2s infinite;
         }
 
         @keyframes pulse {
@@ -149,7 +154,7 @@
                 <div class="fever-bar">
                     <div id="fever-fill" class="fever-progress"></div>
                 </div>
-                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Fever Meter</div>
+                <div class="text-[10px] font-bold uppercase tracking-widest text-slate-500">Mode Meter</div>
             </div>
         </div>
 
@@ -224,6 +229,13 @@
             fever: 0,
             lives: 5,
             isFeverActive: false,
+            feverMeasures: 0,
+            isClearingForSpecial: false,
+            isSpecialDropping: false,
+            isSuperRushActive: false,
+            superRushMeasures: 0,
+            isRecovering: false,
+            recoveryMeasures: 0,
             gameActive: false,
             lastFrame: 0,
             shake: 0,
@@ -240,7 +252,7 @@
             baseSpawnRate: 1.0,
             perfectZone: 40,
             hitRange: 80,
-            measuresPerLevel: 16 // Reduced from 64 for quicker level pacing
+            measuresPerLevel: 16
         };
 
         let notes = [];
@@ -250,9 +262,7 @@
         let audioEngine = null;
         let spawnTimeout = null;
 
-        // --- NEURO-PSYCH: SHOUTOUTS & VOICE ---
         function triggerShoutout(text, pitch = 1.0) {
-            // Visual
             shoutoutText.innerText = text;
             shoutoutText.classList.remove('shoutout-fade');
             shoutoutText.classList.add('shoutout-active');
@@ -262,7 +272,6 @@
                 shoutoutText.classList.add('shoutout-fade');
             }, 1000);
 
-            // Voice (Web Speech API)
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
@@ -273,14 +282,12 @@
             }
         }
 
-        // --- NEURO-PSYCH: AUDIO SYNTHESIS UPGRADE ---
         class AudioEngine {
             constructor() {
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.isPlaying = false;
                 this.timerID = null;
 
-                // Define Song Profiles
                 this.songProfiles = [
                     {
                         name: "Synthwave",
@@ -411,11 +418,59 @@
                             if (state.totalMeasures >= state.level * config.measuresPerLevel) {
                                 checkLevelUp();
                             }
+
+                            // Measure Progress Tracking for Fever & Super Rush Modes
+                            if (state.isFeverActive && !state.isSpecialDropping) {
+                                state.feverMeasures++;
+
+                                if (state.feverMeasures === 7) {
+                                    // Start clearing the screen of normal notes
+                                    state.isClearingForSpecial = true;
+                                }
+
+                                if (state.feverMeasures >= 8) {
+                                    // Screen is clear, drop the special note. Fever remains visually active!
+                                    state.isClearingForSpecial = false;
+                                    state.isSpecialDropping = true;
+                                    state.fever = 0;
+
+                                    triggerShoutout("CATCH THIS!", 1.5);
+                                    notes.push(new Note(false, true)); // Special Diamond Note
+                                    updateUI();
+                                } else {
+                                    state.fever = 100 - (state.feverMeasures / 8) * 100;
+                                    updateUI();
+                                }
+                            } else if (state.isSuperRushActive) {
+                                state.superRushMeasures++;
+                                if (state.superRushMeasures >= 4) {
+                                    // Super Rush Ends - Enter Recovery Space
+                                    state.isSuperRushActive = false;
+                                    state.fever = 0;
+                                    feverFill.classList.remove('super-rush-active');
+                                    triggerShoutout("BREATHE...", 0.6);
+                                    updateUI();
+
+                                    state.isRecovering = true;
+                                    state.recoveryMeasures = 0;
+                                } else {
+                                    state.fever = 100 - (state.superRushMeasures / 4) * 100;
+                                    updateUI();
+                                }
+                            } else if (state.isRecovering) {
+                                state.recoveryMeasures++;
+                                if (state.recoveryMeasures >= 2) {
+                                    // Recovery Ends - Back to Normal
+                                    state.isRecovering = false;
+                                    triggerShoutout("GO!", 1.2);
+                                }
+                            }
                         }
                     }
 
                     let currentBpm = this.bpm + ((state.level - 1) * 10);
                     if (state.isFeverActive) currentBpm += 15;
+                    if (state.isSuperRushActive) currentBpm *= 2.0; // Double BPM for chaotic music
 
                     this.nextNoteTime += (60 / currentBpm) / 4;
                 }
@@ -451,7 +506,7 @@
 
                 if (level >= 4) {
                     this.playNoise(0.02, 0.05, 'highpass', 10000);
-                    if (state.isFeverActive && step === 0) {
+                    if ((state.isFeverActive || state.isSuperRushActive) && step === 0) {
                         this.playTone(chord.arp[3] * 2, 'sine', 0.5, 1.5, 0.05);
                     }
                 }
@@ -482,22 +537,17 @@
             }
         }
 
-        // --- RENDER & SIZING ---
         function resize() {
             const container = document.getElementById('game-container');
             canvas.width = Math.min(window.innerWidth * 0.9, 450);
             canvas.height = window.innerHeight * 0.85;
-
             config.targetY = canvas.height - 120;
-
             const laneWidth = canvas.width / config.laneCount;
             lanes = Array.from({ length: config.laneCount }, (_, i) => laneWidth * i + laneWidth / 2);
         }
-
         window.addEventListener('resize', resize);
         resize();
 
-        // --- GAME CLASSES ---
         class Particle {
             constructor(x, y, color, chaotic = false) {
                 this.x = x;
@@ -525,8 +575,9 @@
         }
 
         class Note {
-            constructor(isBug = false) {
+            constructor(isBug = false, isSpecial = false) {
                 this.isBug = isBug;
+                this.isSpecial = isSpecial;
                 this.lane = Math.floor(Math.random() * config.laneCount);
                 this.x = lanes[this.lane];
                 this.y = -50;
@@ -536,20 +587,26 @@
                 this.stretchY = 1;
 
                 if (this.isBug) {
-                    this.color = '#84cc16'; // Toxic green
+                    this.color = '#84cc16';
+                } else if (this.isSpecial) {
+                    this.color = '#c084fc';
+                    this.size = 45;
                 } else {
                     const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444'];
-                    this.color = state.isFeverActive ? '#fbbf24' : (colors[Math.min(state.level - 1, 3)] || '#ec4899');
+                    this.color = (state.isFeverActive || state.isSuperRushActive) ? '#fbbf24' : (colors[Math.min(state.level - 1, 3)] || '#ec4899');
                 }
             }
             update(dt) {
                 let speedMultiplier = 1 + ((state.level - 1) * 0.2);
                 if (state.isFeverActive) speedMultiplier += 0.3;
+                if (state.isSuperRushActive) speedMultiplier *= 10.0; // 10x Drop Speed
+                if (this.isSpecial) speedMultiplier *= 2.0;
 
                 this.y += config.baseNoteSpeed * speedMultiplier * dt;
 
                 const dist = Math.abs(this.y - config.targetY);
-                if (dist < 150 && !this.isBug) {
+                // Don't squash/stretch bugs OR the special diamond
+                if (dist < 150 && !this.isBug && !this.isSpecial) {
                     this.stretchY = 1.3;
                     this.stretchX = 0.7;
                 } else {
@@ -566,7 +623,6 @@
                 ctx.shadowColor = this.color;
 
                 if (this.isBug) {
-                    // Draw rotating Spiked Mine
                     ctx.fillStyle = '#0f172a';
                     ctx.beginPath();
                     ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
@@ -576,7 +632,7 @@
                     ctx.lineWidth = 4;
                     ctx.beginPath();
                     for (let i = 0; i < 8; i++) {
-                        let angle = (i / 8) * Math.PI * 2 + (performance.now() / 300); // Spinning effect
+                        let angle = (i / 8) * Math.PI * 2 + (performance.now() / 300);
                         let outerX = Math.cos(angle) * (this.size / 1.3);
                         let outerY = Math.sin(angle) * (this.size / 1.3);
                         ctx.moveTo(0, 0);
@@ -584,14 +640,27 @@
                     }
                     ctx.stroke();
 
-                    // Inner core
                     ctx.fillStyle = this.color;
                     ctx.beginPath();
                     ctx.arc(0, 0, this.size / 4, 0, Math.PI * 2);
                     ctx.fill();
 
+                } else if (this.isSpecial) {
+                    // Diamond shape for special object
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -this.size);
+                    ctx.lineTo(this.size, 0);
+                    ctx.lineTo(0, this.size);
+                    ctx.lineTo(-this.size, 0);
+                    ctx.closePath();
+                    ctx.fill();
+
+                    ctx.strokeStyle = this.color;
+                    ctx.lineWidth = 5;
+                    ctx.stroke();
+
                 } else {
-                    // Draw standard note
                     const grad = ctx.createLinearGradient(0, -this.size / 2, 0, this.size / 2);
                     grad.addColorStop(0, '#ffffff');
                     grad.addColorStop(0.5, this.color);
@@ -602,29 +671,39 @@
                     ctx.roundRect(-this.size / 2 + 5, -this.size / 4, this.size - 10, this.size / 2, 8);
                     ctx.fill();
                 }
-
                 ctx.restore();
             }
         }
 
-        // --- GAMEPLAY LOGIC ---
         function spawnNote() {
             if (!state.gameActive) return;
+
+            let spawnMultiplier = 1 + ((state.level - 1) * 0.15);
+            if (state.isFeverActive) spawnMultiplier += 0.2;
+            if (state.isSuperRushActive) spawnMultiplier *= 10.0; // 10x Spawn Rate
+
+            const delay = (1000 / (config.baseSpawnRate * spawnMultiplier));
+
+            // Skip spawning during the recovery breather, or while clearing/dropping the special note
+            if (state.isRecovering || state.isClearingForSpecial || state.isSpecialDropping) {
+                spawnTimeout = setTimeout(spawnNote, delay);
+                return;
+            }
 
             state.notesSpawned++;
             let isBug = false;
             if (state.notesSpawned >= state.nextBugAt) {
                 isBug = true;
-                // Schedule the next bug to appear in 10 to 20 notes
                 state.nextBugAt = state.notesSpawned + Math.floor(Math.random() * 11) + 10;
             }
 
-            notes.push(new Note(isBug));
+            // Avoid bugs during Super Rush
+            if (state.isSuperRushActive && isBug) {
+                isBug = false;
+            }
 
-            let spawnMultiplier = 1 + ((state.level - 1) * 0.15);
-            if (state.isFeverActive) spawnMultiplier += 0.2;
+            notes.push(new Note(isBug, false));
 
-            const delay = (1000 / (config.baseSpawnRate * spawnMultiplier));
             spawnTimeout = setTimeout(spawnNote, delay);
         }
 
@@ -647,12 +726,45 @@
             if (hitNote) {
                 if (hitNote.note.isBug) {
                     processBugHit(hitNote.note, hitNote.index);
+                } else if (hitNote.note.isSpecial) {
+                    processSpecialHit(hitNote.note, hitNote.index);
                 } else {
                     processHit(hitNote);
                 }
             } else {
-                processMiss();
+                if (!state.isSuperRushActive && !state.isRecovering) {
+                    processMiss();
+                }
             }
+        }
+
+        function processSpecialHit(note, index) {
+            note.hit = true;
+            for (let i = 0; i < 60; i++) particles.push(new Particle(note.x, note.y, '#c084fc', true));
+            notes.splice(index, 1);
+
+            // Clean up fever state just to be safe before Rush starts
+            state.isFeverActive = false;
+            state.isClearingForSpecial = false;
+            state.isSpecialDropping = false;
+            feverFill.classList.remove('fever-active');
+
+            activateSuperRushMode();
+        }
+
+        function activateSuperRushMode() {
+            state.isSuperRushActive = true;
+            state.superRushMeasures = 0;
+            state.fever = 100;
+            state.shake = 60; // Max chaos
+
+            if (audioEngine) audioEngine.sfxLevelUp();
+            triggerShoutout("SUPER RUSH!!!", 0.3); // 0.3 Pitch = Deep Monster Truck Voice
+
+            // Change meter appearance
+            feverFill.style.background = 'linear-gradient(90deg, #22d3ee, #818cf8)';
+            feverFill.classList.add('super-rush-active');
+            updateUI();
         }
 
         function processBugHit(note, index) {
@@ -665,23 +777,26 @@
 
             if (state.isFeverActive) {
                 state.isFeverActive = false;
+                state.isClearingForSpecial = false;
+                state.isSpecialDropping = false;
                 feverFill.classList.remove('fever-active');
             }
+            if (state.isSuperRushActive) {
+                state.isSuperRushActive = false;
+                feverFill.classList.remove('super-rush-active');
+            }
+            state.isRecovering = false;
 
             if (audioEngine) audioEngine.sfxExplosion();
-
             showFeedback('POISON!', '#84cc16');
             triggerShoutout("CAREFUL!", 0.5);
 
-            // Explosion Particles
             for (let i = 0; i < 40; i++) particles.push(new Particle(note.x, note.y, '#84cc16', true));
 
             updateUI();
             notes.splice(index, 1);
 
-            if (state.lives <= 0) {
-                endGame();
-            }
+            if (state.lives <= 0) endGame();
         }
 
         function processHit({ note, index, diff }) {
@@ -690,34 +805,35 @@
 
             const basePoints = isPerfect ? 100 : 50;
             const levelMultiplier = state.level;
-            const feverMultiplier = state.isFeverActive ? 4 : 1;
+            const feverMultiplier = state.isFeverActive ? 4 : (state.isSuperRushActive ? 2 : 1);
 
             state.score += (basePoints * levelMultiplier * feverMultiplier);
             state.streak++;
             state.maxStreak = Math.max(state.streak, state.maxStreak);
 
-            // --- SHOUTOUT TRIGGERS ---
             if (state.streak === 10) triggerShoutout("10 COMBO!", 1.0);
             else if (state.streak === 25) triggerShoutout("25 COMBO!", 1.2);
             else if (state.streak === 50) triggerShoutout("50 COMBO!!", 1.5);
             else if (state.streak === 100) triggerShoutout("UNSTOPPABLE!!", 1.8);
 
-            if (!state.isFeverActive) {
+            if (!state.isFeverActive && !state.isSuperRushActive) {
                 state.fever = Math.min(100, state.fever + (isPerfect ? 5 : 2));
                 if (state.fever >= 100) activateFever();
             }
 
             if (audioEngine) audioEngine.sfxHit(isPerfect);
 
-            const isChaotic = state.isFeverActive;
+            const isChaotic = state.isFeverActive || state.isSuperRushActive;
             const pCount = isChaotic ? 100 : (isPerfect ? 25 : 10);
             const color = isChaotic ? (Math.random() > 0.5 ? '#fbbf24' : '#fff') : (isPerfect ? '#fbbf24' : note.color);
             for (let i = 0; i < pCount; i++) particles.push(new Particle(note.x, note.y, color, isChaotic));
 
-            state.shake = isChaotic ? 40 : (isPerfect ? 12 : 5);
-            showFeedback(isChaotic ? 'INSANE!' : (isPerfect ? 'PERFECT' : 'GOOD'), isChaotic ? '#fbbf24' : '#fff');
-            updateUI();
+            state.shake = isChaotic ? 30 : (isPerfect ? 12 : 5);
 
+            if (state.isSuperRushActive) showFeedback('AUTO!', '#22d3ee');
+            else showFeedback(isChaotic ? 'INSANE!' : (isPerfect ? 'PERFECT' : 'GOOD'), isChaotic ? '#fbbf24' : '#fff');
+
+            updateUI();
             notes.splice(index, 1);
         }
 
@@ -733,18 +849,23 @@
 
             if (state.isFeverActive) {
                 state.isFeverActive = false;
+                state.isClearingForSpecial = false;
+                state.isSpecialDropping = false;
                 feverFill.classList.remove('fever-active');
                 triggerShoutout("FEVER LOST!", 0.5);
             }
+            if (state.isSuperRushActive) {
+                state.isSuperRushActive = false;
+                feverFill.classList.remove('super-rush-active');
+            }
+            state.isRecovering = false;
 
             if (audioEngine && state.streak > 0) audioEngine.sfxMiss();
             state.streak = 0;
             state.fever = 0;
             updateUI();
 
-            if (state.lives <= 0) {
-                endGame();
-            }
+            if (state.lives <= 0) endGame();
         }
 
         function checkLevelUp() {
@@ -757,8 +878,11 @@
 
         function activateFever() {
             state.isFeverActive = true;
+            state.feverMeasures = 0;
             state.shake = 35;
             state.fever = 100;
+            feverFill.style.background = 'linear-gradient(90deg, #f472b6, #fbbf24)';
+
             if (audioEngine) audioEngine.sfxFever();
             triggerShoutout("FEVER TIME!", 2.0);
             feverFill.classList.add('fever-active');
@@ -782,7 +906,6 @@
             feverFill.style.width = state.fever + '%';
         }
 
-        // --- GAME LOOP ---
         function startGame() {
             if (!audioEngine) audioEngine = new AudioEngine();
             audioEngine.start();
@@ -797,16 +920,25 @@
                 fever: 0,
                 lives: 5,
                 isFeverActive: false,
+                feverMeasures: 0,
+                isClearingForSpecial: false,
+                isSpecialDropping: false,
+                isSuperRushActive: false,
+                superRushMeasures: 0,
+                isRecovering: false,
+                recoveryMeasures: 0,
                 gameActive: true,
                 lastFrame: performance.now(),
                 shake: 0,
                 totalMeasures: 0,
                 notesSpawned: 0,
-                nextBugAt: Math.floor(Math.random() * 11) + 10 // Bug at 10-20 notes
+                nextBugAt: Math.floor(Math.random() * 11) + 10
             };
             notes = [];
             particles = [];
             lanePulses = [0, 0, 0, 0];
+            feverFill.style.background = 'linear-gradient(90deg, #f472b6, #fbbf24)';
+            feverFill.classList.remove('fever-active', 'super-rush-active');
 
             menu.classList.add('hidden');
             gameOverScreen.classList.add('hidden');
@@ -859,11 +991,27 @@
             for (let i = notes.length - 1; i >= 0; i--) {
                 notes[i].update(dt);
 
+                // Super Rush Auto-Hit Logic
+                if (state.isSuperRushActive && !notes[i].hit && !notes[i].isBug && notes[i].y >= config.targetY) {
+                    lanePulses[notes[i].lane] = 1.0; // Simulate visual tap
+                    processHit({ note: notes[i], index: i, diff: 0 });
+                    continue;
+                }
+
                 // Note has passed the hit zone
                 if (notes[i].y > canvas.height + 20) {
-                    // If it's a bug, passing is GOOD. Only miss if it's a standard note
-                    if (!notes[i].hit && !notes[i].isBug) {
-                        processMiss();
+                    if (!notes[i].hit) {
+                        if (notes[i].isSpecial) {
+                            // Special item missed: No penalty, but fever/special states clear!
+                            state.isFeverActive = false;
+                            state.isSpecialDropping = false;
+                            feverFill.classList.remove('fever-active');
+                            state.fever = 0;
+                            updateUI();
+                            triggerShoutout("NORMAL SPEED", 1.0);
+                        } else if (!notes[i].isBug) {
+                            processMiss();
+                        }
                     }
                     notes.splice(i, 1);
                 }
@@ -876,10 +1024,15 @@
         }
 
         function draw() {
-            // Base Background - STROBE REMOVED
             const bgGrad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            bgGrad.addColorStop(0, '#0f172a');
-            bgGrad.addColorStop(1, state.isFeverActive ? '#991b1b' : '#1e1b4b'); // Deep, solid red for fever
+
+            if (state.isSuperRushActive) {
+                bgGrad.addColorStop(0, '#0f172a');
+                bgGrad.addColorStop(1, '#082f49'); // Neon cyan/dark blue for super rush
+            } else {
+                bgGrad.addColorStop(0, '#0f172a');
+                bgGrad.addColorStop(1, state.isFeverActive ? '#991b1b' : '#1e1b4b');
+            }
 
             ctx.fillStyle = bgGrad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -891,10 +1044,14 @@
 
             // Perspective Grid
             const time = performance.now() / 1000;
-            const speed = 100 * (1 + (state.level * 0.2));
+            const speed = 100 * (1 + (state.level * 0.2)) * (state.isSuperRushActive ? 10 : 1);
             const gridY = (time * speed) % 80;
 
-            ctx.strokeStyle = state.isFeverActive ? 'rgba(251, 191, 36, 0.2)' : 'rgba(236, 72, 153, 0.15)';
+            let gridColor = 'rgba(236, 72, 153, 0.15)';
+            if (state.isFeverActive) gridColor = 'rgba(251, 191, 36, 0.2)';
+            if (state.isSuperRushActive) gridColor = 'rgba(34, 211, 238, 0.3)';
+
+            ctx.strokeStyle = gridColor;
             ctx.lineWidth = 1 + (state.level * 0.2);
             ctx.beginPath();
             for (let y = gridY; y < canvas.height; y += 80) {
@@ -910,7 +1067,6 @@
 
             const laneWidth = canvas.width / config.laneCount;
 
-            // Draw Lanes and Pulses
             ctx.strokeStyle = 'rgba(255,255,255,0.05)';
             ctx.lineWidth = 2;
             lanes.forEach((x, i) => {
@@ -921,7 +1077,7 @@
 
                 if (lanePulses[i] > 0) {
                     const pulseGrad = ctx.createLinearGradient(0, config.targetY, 0, 0);
-                    const color = state.isFeverActive ? '251, 191, 36' : '236, 72, 153';
+                    const color = state.isSuperRushActive ? '34, 211, 238' : (state.isFeverActive ? '251, 191, 36' : '236, 72, 153');
                     pulseGrad.addColorStop(0, `rgba(${color}, ${lanePulses[i] * 0.5})`);
                     pulseGrad.addColorStop(1, `rgba(${color}, 0)`);
                     ctx.fillStyle = pulseGrad;
@@ -930,13 +1086,13 @@
             });
 
             // Target Zone
-            ctx.fillStyle = state.isFeverActive ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255,255,255,0.05)';
+            ctx.fillStyle = state.isSuperRushActive ? 'rgba(34, 211, 238, 0.2)' : (state.isFeverActive ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255,255,255,0.05)');
             ctx.beginPath();
             ctx.roundRect(10, config.targetY - 20, canvas.width - 20, 40, 10);
             ctx.fill();
             ctx.shadowBlur = 15;
-            ctx.shadowColor = state.isFeverActive ? '#fbbf24' : '#ec4899';
-            ctx.strokeStyle = state.isFeverActive ? '#fbbf24' : 'rgba(236, 72, 153, 0.8)';
+            ctx.shadowColor = state.isSuperRushActive ? '#22d3ee' : (state.isFeverActive ? '#fbbf24' : '#ec4899');
+            ctx.strokeStyle = state.isSuperRushActive ? '#22d3ee' : (state.isFeverActive ? '#fbbf24' : 'rgba(236, 72, 153, 0.8)');
             ctx.lineWidth = 2;
             ctx.stroke();
             ctx.shadowBlur = 0;
@@ -947,7 +1103,6 @@
             ctx.restore();
         }
 
-        // --- CONTROLS ---
         function handleTap(laneIndex) {
             if (!audioEngine) return;
             if (audioEngine.ctx.state === 'suspended') audioEngine.ctx.resume();
@@ -976,7 +1131,7 @@
                 const laneIndex = Math.floor(touchX / (canvas.width / config.laneCount));
                 handleTap(laneIndex);
             }
-        });
+        }, { passive: false });
 
         canvas.addEventListener('mousedown', (e) => {
             const rect = canvas.getBoundingClientRect();
