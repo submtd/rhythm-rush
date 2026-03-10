@@ -234,8 +234,6 @@
             isSpecialDropping: false,
             isSuperRushActive: false,
             superRushMeasures: 0,
-            isRecovering: false,
-            recoveryMeasures: 0,
             gameActive: false,
             lastFrame: 0,
             shake: 0,
@@ -288,50 +286,59 @@
                 this.isPlaying = false;
                 this.timerID = null;
 
-                this.songProfiles = [
-                    {
-                        name: "Synthwave",
-                        bpm: 110,
-                        chords: [
-                            { root: 73.42, arp: [146.83, 174.61, 220.00, 293.66] },
-                            { root: 87.31, arp: [174.61, 220.00, 261.63, 349.23] },
-                            { root: 55.00, arp: [110.00, 130.81, 164.81, 220.00] },
-                            { root: 98.00, arp: [196.00, 246.94, 293.66, 392.00] }
-                        ],
-                        bassType: 'square',
-                        leadType: 'sawtooth'
-                    },
-                    {
-                        name: "Cyberpunk",
-                        bpm: 135,
-                        chords: [
-                            { root: 65.41, arp: [130.81, 155.56, 196.00, 261.63] },
-                            { root: 65.41, arp: [130.81, 155.56, 196.00, 261.63] },
-                            { root: 58.27, arp: [116.54, 138.59, 174.61, 233.08] },
-                            { root: 77.78, arp: [155.56, 185.00, 233.08, 311.13] }
-                        ],
-                        bassType: 'sawtooth',
-                        leadType: 'square'
-                    },
-                    {
-                        name: "Dreamy",
-                        bpm: 95,
-                        chords: [
-                            { root: 110.00, arp: [220.00, 277.18, 329.63, 440.00] },
-                            { root: 110.00, arp: [220.00, 277.18, 329.63, 440.00] },
-                            { root: 82.41, arp: [164.81, 207.65, 246.94, 329.63] },
-                            { root: 92.50, arp: [185.00, 233.08, 277.18, 369.99] }
-                        ],
-                        bassType: 'triangle',
-                        leadType: 'sine'
-                    }
-                ];
-
-                this.currentProfile = this.songProfiles[0];
-                this.bpm = this.currentProfile.bpm;
+                this.bpm = 120;
                 this.bar = 0;
                 this.nextNoteTime = this.ctx.currentTime + 0.1;
                 this.step = 0;
+                this.chords = [];
+                this.bassType = 'square';
+                this.leadType = 'sawtooth';
+            }
+
+            // PROCEDURAL MUSIC GENERATION
+            generateProceduralSong() {
+                // Random BPM between 100 and 140
+                this.bpm = Math.floor(Math.random() * 41) + 100;
+
+                const synthTypes = ['square', 'sawtooth', 'triangle'];
+                const leadTypes = ['square', 'sawtooth', 'sine', 'triangle'];
+
+                this.bassType = synthTypes[Math.floor(Math.random() * synthTypes.length)];
+                this.leadType = leadTypes[Math.floor(Math.random() * leadTypes.length)];
+
+                // Random root frequency between 45Hz (approx F1) and 85Hz (approx F2)
+                const baseFreq = 45 + Math.random() * 40;
+                const getFreq = (semitones) => baseFreq * Math.pow(2, semitones / 12);
+
+                // Common chord progressions expressed in semitones relative to a minor root
+                // 0=i, 3=III, 5=iv, 7=v, 8=VI, 10=VII
+                const progressions = [
+                    [0, 8, 3, 10], // i - VI - III - VII (Epic)
+                    [0, 5, 7, 0],  // i - iv - v - i (Classic Minor)
+                    [0, 3, 7, 5],  // i - III - v - iv (Melancholy)
+                    [0, 8, 5, 7],  // i - VI - iv - v (Dramatic)
+                    [0, 10, 8, 7], // i - VII - VI - v (Descending)
+                    [0, 0, 8, 10]  // i - i - VI - VII (Anticipation)
+                ];
+
+                const prog = progressions[Math.floor(Math.random() * progressions.length)];
+
+                this.chords = prog.map(rootSemitone => {
+                    const root = getFreq(rootSemitone);
+                    // Determine if chord is major or minor based on natural minor scale degrees
+                    const isMajor = [3, 8, 10].includes(rootSemitone);
+                    const third = isMajor ? 4 : 3;
+
+                    return {
+                        root: root,
+                        arp: [
+                            root,
+                            root * Math.pow(2, third / 12), // 3rd
+                            root * Math.pow(2, 7 / 12),     // 5th
+                            root * 2                      // Octave
+                        ]
+                    };
+                });
             }
 
             start() {
@@ -346,8 +353,8 @@
                 if (this.isPlaying) return;
                 this.isPlaying = true;
 
-                this.currentProfile = this.songProfiles[Math.floor(Math.random() * this.songProfiles.length)];
-                this.bpm = this.currentProfile.bpm;
+                // Generate brand new music every time we start
+                this.generateProceduralSong();
 
                 this.nextNoteTime = this.ctx.currentTime + 0.1;
                 this.step = 0;
@@ -411,7 +418,7 @@
                     this.step++;
                     if (this.step >= 16) {
                         this.step = 0;
-                        this.bar = (this.bar + 1) % 4; // 4 bar loop
+                        this.bar = (this.bar + 1) % 4;
 
                         if (state.gameActive) {
                             state.totalMeasures++;
@@ -419,23 +426,20 @@
                                 checkLevelUp();
                             }
 
-                            // Measure Progress Tracking for Fever & Super Rush Modes
                             if (state.isFeverActive && !state.isSpecialDropping) {
                                 state.feverMeasures++;
 
                                 if (state.feverMeasures === 7) {
-                                    // Start clearing the screen of normal notes
                                     state.isClearingForSpecial = true;
                                 }
 
                                 if (state.feverMeasures >= 8) {
-                                    // Screen is clear, drop the special note. Fever remains visually active!
                                     state.isClearingForSpecial = false;
                                     state.isSpecialDropping = true;
                                     state.fever = 0;
 
                                     triggerShoutout("CATCH THIS!", 1.5);
-                                    notes.push(new Note(false, true)); // Special Diamond Note
+                                    notes.push(new Note(false, true));
                                     updateUI();
                                 } else {
                                     state.fever = 100 - (state.feverMeasures / 8) * 100;
@@ -444,25 +448,22 @@
                             } else if (state.isSuperRushActive) {
                                 state.superRushMeasures++;
                                 if (state.superRushMeasures >= 4) {
-                                    // Super Rush Ends - Enter Recovery Space
+                                    // Super Rush Ends
                                     state.isSuperRushActive = false;
                                     state.fever = 0;
                                     feverFill.classList.remove('super-rush-active');
-                                    triggerShoutout("BREATHE...", 0.6);
-                                    updateUI();
 
-                                    state.isRecovering = true;
-                                    state.recoveryMeasures = 0;
+                                    // Clean wipe of all 10x speed residual notes on screen.
+                                    // This guarantees the NEXT spawned note starts perfectly at the top
+                                    // and falls at normal speed, creating a natural pause/breather.
+                                    notes.forEach(note => {
+                                        for (let i = 0; i < 8; i++) particles.push(new Particle(note.x, note.y, note.color, true));
+                                    });
+                                    notes = [];
+                                    updateUI();
                                 } else {
                                     state.fever = 100 - (state.superRushMeasures / 4) * 100;
                                     updateUI();
-                                }
-                            } else if (state.isRecovering) {
-                                state.recoveryMeasures++;
-                                if (state.recoveryMeasures >= 2) {
-                                    // Recovery Ends - Back to Normal
-                                    state.isRecovering = false;
-                                    triggerShoutout("GO!", 1.2);
                                 }
                             }
                         }
@@ -470,7 +471,7 @@
 
                     let currentBpm = this.bpm + ((state.level - 1) * 10);
                     if (state.isFeverActive) currentBpm += 15;
-                    if (state.isSuperRushActive) currentBpm *= 2.0; // Double BPM for chaotic music
+                    if (state.isSuperRushActive) currentBpm *= 2.0;
 
                     this.nextNoteTime += (60 / currentBpm) / 4;
                 }
@@ -478,13 +479,13 @@
             }
 
             playSequenceStep(step, level) {
-                const chord = this.currentProfile.chords[this.bar];
+                const chord = this.chords[this.bar];
 
                 if (step % 4 === 0) {
                     this.playTone(120, 'sine', 0.01, 0.4, 0.6, 40);
                 }
                 if (step % 4 === 0 || step === 10 || step === 14) {
-                    this.playTone(chord.root, this.currentProfile.bassType, 0.02, 0.3, 0.15);
+                    this.playTone(chord.root, this.bassType, 0.02, 0.3, 0.15);
                 }
 
                 if (level >= 2) {
@@ -500,7 +501,7 @@
                 if (level >= 3) {
                     const arpFreq = chord.arp[step % 4];
                     if (step % 2 === 0 || step % 3 === 0) {
-                        this.playTone(arpFreq, this.currentProfile.leadType, 0.05, 0.15, 0.08);
+                        this.playTone(arpFreq, this.leadType, 0.05, 0.15, 0.08);
                     }
                 }
 
@@ -605,7 +606,6 @@
                 this.y += config.baseNoteSpeed * speedMultiplier * dt;
 
                 const dist = Math.abs(this.y - config.targetY);
-                // Don't squash/stretch bugs OR the special diamond
                 if (dist < 150 && !this.isBug && !this.isSpecial) {
                     this.stretchY = 1.3;
                     this.stretchX = 0.7;
@@ -646,7 +646,6 @@
                     ctx.fill();
 
                 } else if (this.isSpecial) {
-                    // Diamond shape for special object
                     ctx.fillStyle = '#ffffff';
                     ctx.beginPath();
                     ctx.moveTo(0, -this.size);
@@ -680,12 +679,12 @@
 
             let spawnMultiplier = 1 + ((state.level - 1) * 0.15);
             if (state.isFeverActive) spawnMultiplier += 0.2;
-            if (state.isSuperRushActive) spawnMultiplier *= 10.0; // 10x Spawn Rate
+            if (state.isSuperRushActive) spawnMultiplier *= 10.0;
 
             const delay = (1000 / (config.baseSpawnRate * spawnMultiplier));
 
-            // Skip spawning during the recovery breather, or while clearing/dropping the special note
-            if (state.isRecovering || state.isClearingForSpecial || state.isSpecialDropping) {
+            // Skip spawning normal notes while clearing/dropping the special note
+            if (state.isClearingForSpecial || state.isSpecialDropping) {
                 spawnTimeout = setTimeout(spawnNote, delay);
                 return;
             }
@@ -697,7 +696,6 @@
                 state.nextBugAt = state.notesSpawned + Math.floor(Math.random() * 11) + 10;
             }
 
-            // Avoid bugs during Super Rush
             if (state.isSuperRushActive && isBug) {
                 isBug = false;
             }
@@ -732,7 +730,7 @@
                     processHit(hitNote);
                 }
             } else {
-                if (!state.isSuperRushActive && !state.isRecovering) {
+                if (!state.isSuperRushActive) {
                     processMiss();
                 }
             }
@@ -743,7 +741,6 @@
             for (let i = 0; i < 60; i++) particles.push(new Particle(note.x, note.y, '#c084fc', true));
             notes.splice(index, 1);
 
-            // Clean up fever state just to be safe before Rush starts
             state.isFeverActive = false;
             state.isClearingForSpecial = false;
             state.isSpecialDropping = false;
@@ -756,12 +753,11 @@
             state.isSuperRushActive = true;
             state.superRushMeasures = 0;
             state.fever = 100;
-            state.shake = 60; // Max chaos
+            state.shake = 60;
 
             if (audioEngine) audioEngine.sfxLevelUp();
-            triggerShoutout("SUPER RUSH!!!", 0.3); // 0.3 Pitch = Deep Monster Truck Voice
+            triggerShoutout("SUPER RUSH!!!", 0.3);
 
-            // Change meter appearance
             feverFill.style.background = 'linear-gradient(90deg, #22d3ee, #818cf8)';
             feverFill.classList.add('super-rush-active');
             updateUI();
@@ -785,7 +781,6 @@
                 state.isSuperRushActive = false;
                 feverFill.classList.remove('super-rush-active');
             }
-            state.isRecovering = false;
 
             if (audioEngine) audioEngine.sfxExplosion();
             showFeedback('POISON!', '#84cc16');
@@ -858,7 +853,6 @@
                 state.isSuperRushActive = false;
                 feverFill.classList.remove('super-rush-active');
             }
-            state.isRecovering = false;
 
             if (audioEngine && state.streak > 0) audioEngine.sfxMiss();
             state.streak = 0;
@@ -925,8 +919,6 @@
                 isSpecialDropping: false,
                 isSuperRushActive: false,
                 superRushMeasures: 0,
-                isRecovering: false,
-                recoveryMeasures: 0,
                 gameActive: true,
                 lastFrame: performance.now(),
                 shake: 0,
@@ -991,24 +983,20 @@
             for (let i = notes.length - 1; i >= 0; i--) {
                 notes[i].update(dt);
 
-                // Super Rush Auto-Hit Logic
                 if (state.isSuperRushActive && !notes[i].hit && !notes[i].isBug && notes[i].y >= config.targetY) {
-                    lanePulses[notes[i].lane] = 1.0; // Simulate visual tap
+                    lanePulses[notes[i].lane] = 1.0;
                     processHit({ note: notes[i], index: i, diff: 0 });
                     continue;
                 }
 
-                // Note has passed the hit zone
                 if (notes[i].y > canvas.height + 20) {
                     if (!notes[i].hit) {
                         if (notes[i].isSpecial) {
-                            // Special item missed: No penalty, but fever/special states clear!
                             state.isFeverActive = false;
                             state.isSpecialDropping = false;
                             feverFill.classList.remove('fever-active');
                             state.fever = 0;
                             updateUI();
-                            triggerShoutout("NORMAL SPEED", 1.0);
                         } else if (!notes[i].isBug) {
                             processMiss();
                         }
@@ -1028,7 +1016,7 @@
 
             if (state.isSuperRushActive) {
                 bgGrad.addColorStop(0, '#0f172a');
-                bgGrad.addColorStop(1, '#082f49'); // Neon cyan/dark blue for super rush
+                bgGrad.addColorStop(1, '#082f49');
             } else {
                 bgGrad.addColorStop(0, '#0f172a');
                 bgGrad.addColorStop(1, state.isFeverActive ? '#991b1b' : '#1e1b4b');
@@ -1042,7 +1030,6 @@
                 ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
             }
 
-            // Perspective Grid
             const time = performance.now() / 1000;
             const speed = 100 * (1 + (state.level * 0.2)) * (state.isSuperRushActive ? 10 : 1);
             const gridY = (time * speed) % 80;
@@ -1085,7 +1072,6 @@
                 }
             });
 
-            // Target Zone
             ctx.fillStyle = state.isSuperRushActive ? 'rgba(34, 211, 238, 0.2)' : (state.isFeverActive ? 'rgba(251, 191, 36, 0.2)' : 'rgba(255,255,255,0.05)');
             ctx.beginPath();
             ctx.roundRect(10, config.targetY - 20, canvas.width - 20, 40, 10);
