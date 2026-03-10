@@ -169,8 +169,8 @@
                 <h1 class="text-5xl font-black text-white mb-2 italic tracking-tighter drop-shadow-lg">RHYTHM<br><span
                         class="text-pink-500">RUSH</span></h1>
                 <p class="text-xs font-bold text-pink-400 uppercase tracking-widest mb-6">Level Up Edition</p>
-                <p class="text-slate-400 mb-8 leading-relaxed">Tap the screen or press <span
-                        class="text-white font-mono">SPACE</span> when notes enter the target zone. Turn up your volume.
+                <p class="text-slate-400 mb-8 leading-relaxed">Tap the screen when notes enter the target zone. Turn up
+                    your volume.
                 </p>
                 <p class="text-lime-500 text-xs font-bold uppercase mb-4 animate-pulse">⚠ DO NOT TAP THE GREEN VIRUS
                     BUGS ⚠</p>
@@ -1096,18 +1096,6 @@
             triggerHit(laneIndex);
         }
 
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-                const nextNote = notes[0];
-                const lane = nextNote ? nextNote.lane : Math.floor(Math.random() * config.laneCount);
-                handleTap(lane);
-            }
-            if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
-                const lane = parseInt(e.key) - 1;
-                handleTap(lane);
-            }
-        });
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
