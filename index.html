@@ -170,8 +170,7 @@
                         class="text-pink-500">RUSH</span></h1>
                 <p class="text-xs font-bold text-pink-400 uppercase tracking-widest mb-6">Level Up Edition</p>
                 <p class="text-slate-400 mb-8 leading-relaxed">Tap the screen when notes enter the target zone. Turn up
-                    your volume.
-                </p>
+                    your volume.</p>
                 <p class="text-lime-500 text-xs font-bold uppercase mb-4 animate-pulse">⚠ DO NOT TAP THE GREEN VIRUS
                     BUGS ⚠</p>
                 <button onclick="startGame()"
@@ -297,9 +296,12 @@
 
             // PROCEDURAL MUSIC GENERATION
             generateProceduralSong() {
-                // Random BPM between 100 and 140
+                // Random BPM between 100 and 140 for the base track
                 this.bpm = Math.floor(Math.random() * 41) + 100;
+                this.evolveSong();
+            }
 
+            evolveSong() {
                 const synthTypes = ['square', 'sawtooth', 'triangle'];
                 const leadTypes = ['square', 'sawtooth', 'sine', 'triangle'];
 
@@ -521,8 +523,10 @@
                     this.playTone(440, 'triangle', 0.01, 0.1, 0.2);
                 }
             }
-            sfxMiss() {
-                this.playTone(200, 'sawtooth', 0.05, 0.4, 0.3, 50);
+            sfxLifeLost() {
+                // A harsh, descending crunch to indicate taking damage
+                this.playTone(150, 'sawtooth', 0.02, 0.4, 0.4, 40);
+                this.playNoise(0.3, 0.4, 'lowpass', 800);
             }
             sfxExplosion() {
                 this.playNoise(0.6, 0.8, 'lowpass', 600);
@@ -619,7 +623,8 @@
                 ctx.translate(this.x, this.y);
                 ctx.scale(this.stretchX, this.stretchY);
 
-                ctx.shadowBlur = 20;
+                // Remove the blurry shadow for the special note so the edges are perfectly clear
+                ctx.shadowBlur = this.isSpecial ? 0 : 20;
                 ctx.shadowColor = this.color;
 
                 if (this.isBug) {
@@ -646,7 +651,8 @@
                     ctx.fill();
 
                 } else if (this.isSpecial) {
-                    ctx.fillStyle = '#ffffff';
+                    // High contrast, crisp Special Diamond
+                    ctx.fillStyle = this.color; // Deep Purple
                     ctx.beginPath();
                     ctx.moveTo(0, -this.size);
                     ctx.lineTo(this.size, 0);
@@ -655,9 +661,20 @@
                     ctx.closePath();
                     ctx.fill();
 
-                    ctx.strokeStyle = this.color;
-                    ctx.lineWidth = 5;
+                    // Crisp thick white border
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 4;
                     ctx.stroke();
+
+                    // Bright white inner core to make it pop visually
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath();
+                    ctx.moveTo(0, -this.size / 2);
+                    ctx.lineTo(this.size / 2, 0);
+                    ctx.lineTo(0, this.size / 2);
+                    ctx.lineTo(-this.size / 2, 0);
+                    ctx.closePath();
+                    ctx.fill();
 
                 } else {
                     const grad = ctx.createLinearGradient(0, -this.size / 2, 0, this.size / 2);
@@ -854,7 +871,7 @@
                 feverFill.classList.remove('super-rush-active');
             }
 
-            if (audioEngine && state.streak > 0) audioEngine.sfxMiss();
+            if (audioEngine) audioEngine.sfxLifeLost();
             state.streak = 0;
             state.fever = 0;
             updateUI();
@@ -866,6 +883,13 @@
             state.level++;
             state.shake = 25;
             triggerShoutout(`LEVEL ${state.level}!`, 1.5);
+
+            // Once the player has reached level 5 (where all initial audio layers are active),
+            // we evolve the song's parts to a brand new track to keep it fresh
+            if (state.level > 4 && audioEngine) {
+                audioEngine.evolveSong();
+            }
+
             if (audioEngine) audioEngine.sfxLevelUp();
             updateUI();
         }
@@ -1096,6 +1120,18 @@
             triggerHit(laneIndex);
         }
 
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                const nextNote = notes[0];
+                const lane = nextNote ? nextNote.lane : Math.floor(Math.random() * config.laneCount);
+                handleTap(lane);
+            }
+            if (['Digit1', 'Digit2', 'Digit3', 'Digit4'].includes(e.code)) {
+                const lane = parseInt(e.key) - 1;
+                handleTap(lane);
+            }
+        });
 
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
